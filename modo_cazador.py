@@ -1,6 +1,7 @@
 import pygame
 import random
 import sys
+import mapa
 
 # ------------------ Parámetros del laberinto ------------------
 tamaño_celda = 40      # píxeles por casilla
@@ -38,37 +39,13 @@ PLAYER_MOVE_DURATION_MS = 120  # duración animación al caminar
 # ------------------ Crear laberinto ------------------
 # 0 = camino, 1 = muro, 2 = salida
 def crear_laberinto_basico():
-    lab = [[0 for _ in range(COLUMNAS)] for _ in range(FILAS)]
-
-    # bordes como muro
-    for x in range(COLUMNAS):
-        lab[0][x] = 1
-        lab[FILAS - 1][x] = 1
-    for y in range(FILAS):
-        lab[y][0] = 1
-        lab[y][COLUMNAS - 1] = 1
-
-    # algunos muros internos de ejemplo
-    for x in range(2, 13):
-        lab[4][x] = 1
-    for y in range(5, 9):
-        lab[y][7] = 1
-
-    # salida en el borde derecho
-    salida_y = FILAS // 2          # fila central
-    salida_x = COLUMNAS - 1        # última columna (borde derecho)
-    lab[salida_y][salida_x] = 2    # marcar como salida (no muro)
-
-    return lab, salida_x, salida_y
+    lab, sx, sy = mapa.generate_map(COLUMNAS, FILAS, start=(1,1))
+    return lab, sx, sy
 
 laberinto, salida_x, salida_y = crear_laberinto_basico()
 
-# ------------------ Helpers de celdas ------------------
 def celda_es_caminable(x, y):
-    """Devuelve True si la celda (x,y) se puede pisar."""
-    if 0 <= y < FILAS and 0 <= x < COLUMNAS:
-        return laberinto[y][x] in (0, 2)   # camino O salida
-    return False
+    return mapa.is_walkable_by_player(laberinto, x, y)
 
 def distancia_manhattan(x1, y1, x2, y2):
     return abs(x1 - x2) + abs(y1 - y2)
