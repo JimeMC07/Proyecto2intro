@@ -1,8 +1,9 @@
-import os # Para manejo de rutas y archivos
-import sys # Para obtener el intérprete de Python actual, esto para lanzar subprocesos
-import subprocess # Para lanzar otros scripts como subprocesos, esto para no bloquear la UI
+import os  # Para manejo de rutas y archivos
+import sys  # Para obtener el intérprete de Python actual, esto para lanzar subprocesos
+import subprocess  # Para lanzar otros scripts como subprocesos, esto para no bloquear la UI
 import pygame
-import json # Para manejo de archivos JSON (puntajes y configuraciones)
+import json  # Para manejo de archivos JSON (puntajes y configuraciones)
+# OJO: aquí ya NO importamos juego todavía
 
 # -------------------------
 # Inicialización y constantes
@@ -10,12 +11,29 @@ import json # Para manejo de archivos JSON (puntajes y configuraciones)
 pygame.init()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# -------------------------
+# Música de fondo del menú
+# -------------------------
+try:
+    music_path = os.path.join(BASE_DIR, "musica_menu.mp3")  
+    if os.path.exists(music_path):
+        pygame.mixer.music.load(music_path)
+        pygame.mixer.music.set_volume(0.55)  
+        pygame.mixer.music.play(-1)    
+    else:
+        print("⚠️ No se encontró la música del menú:", music_path)
+except Exception as e:
+    print("Error cargando música del menú:", e)
+
 WIDTH, HEIGHT = 640, 480
-SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
+SCREEN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+WIDTH, HEIGHT = SCREEN.get_size()
 pygame.display.set_caption("Escapa / Cazador - Menú")
 FONT = pygame.font.SysFont("consolas", 24)
 SMALL = pygame.font.SysFont("consolas", 18)
 CLOCK = pygame.time.Clock()
+
+import juego  # Importamos juego.py para llamar a su función main()
 
 # Colores reutilizables
 COLOR_BG = (18, 24, 30)
@@ -43,16 +61,9 @@ def load_scores():
 # Lanzamiento de la pantalla de selección (juego.py)
 # -------------------------
 def launch_game():
-    target = os.path.join(BASE_DIR, "juego.py")
-    if not os.path.exists(target):
-        print("juego.py no encontrado en:", target)
-        return
-    try:
-        subprocess.Popen([sys.executable, target], cwd=BASE_DIR)
-        pygame.quit()   # Cierra la ventana actual
-        sys.exit()      # Termina el proceso del menú principal
-    except Exception as e:
-        print("Error al lanzar la pantalla de selección:", e)
+    # En lugar de abrir otro proceso, llamamos a juego.main()
+    juego.main()
+
 # -------------------------
 # Clase Button
 # -------------------------
