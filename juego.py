@@ -1,16 +1,27 @@
 import os
 import sys
-import subprocess  # Para lanzar otros scripts sin bloquear la UI
+import subprocess  # (ya no lo usamos, pero lo dejo por si luego lo ocupas de nuevo)
 import pygame
 import json
+import modo_cazador
+import modo_escapa
 
 # -------------------------
 # Configuración / Constantes
 # -------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-pygame.init()
-# --- PANTALLA COMPLETA ---
-SCREEN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+
+# OJO: aquí ya NO hacemos pygame.init(), eso lo hace main.py
+# pygame.init()
+
+# Intentar reutilizar la ventana existente (creada en main.py)
+SCREEN = pygame.display.get_surface()
+if SCREEN is None:
+    # Si se ejecuta juego.py directamente (sin pasar por main),
+    # entonces sí creamos la ventana fullscreen aquí.
+    pygame.init()
+    SCREEN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+
 SIZE = SCREEN.get_size()  # ahora SIZE tiene (ancho, alto) reales de la pantalla
 
 pygame.display.set_caption("Registro y Selección de Modo - Escapa / Cazador")
@@ -24,9 +35,11 @@ CLOCK = pygame.time.Clock()
 # -------------------------
 try:
     music_path = os.path.join(BASE_DIR, "musica_menu.mp3")
-    pygame.mixer.music.load(music_path)
-    pygame.mixer.music.set_volume(0.35)  # volumen entre 0.0 y 1.0
-    pygame.mixer.music.play(-1)  # -1 = loop infinito
+    # Opcional: solo cargar si no hay música sonando
+    if not pygame.mixer.music.get_busy():
+        pygame.mixer.music.load(music_path)
+        pygame.mixer.music.set_volume(0.35)  # volumen entre 0.0 y 1.0
+        pygame.mixer.music.play(-1)  # -1 = loop infinito
 except Exception as e:
     print("Error cargando música:", e)
 
@@ -71,34 +84,6 @@ def save_player(name):
             print("Error guardando players.json:", e)
 
 # -------------------------
-# Control de instancia única para modos
-# -------------------------
-game_process = None  # Guarda el proceso lanzado, si existe
-
-def launch_script(name, player):
-    """
-    Lanza el script indicado solo si no hay otro proceso de juego abierto.
-    Pasa el nombre del jugador como argumento de línea de comandos.
-    """
-    global game_process
-    path = os.path.join(BASE_DIR, name)
-    if game_process is not None:
-        if game_process.poll() is None:
-            return f"Ya hay una ventana de juego abierta."
-        else:
-            game_process = None
-
-    if not os.path.exists(path):
-        return f"No encontrado: {name}"
-    try:
-        # Pasamos el nombre del jugador como argumento
-        game_process = subprocess.Popen([sys.executable, path, player], cwd=BASE_DIR)
-    except Exception as ex:
-        print("Error al lanzar:", ex)
-        return f"Error al lanzar {name}"
-    return f"Lanzado: {name} (jugador: {player})"
-
-# -------------------------
 # Clase Button (simple)
 # -------------------------
 class Button:
@@ -136,19 +121,17 @@ btn_w, btn_h = 360, 56
 gap = 18
 start_y = SIZE[1]//2 - (btn_h*3 + gap*2)//2 + 40
 
-# funciones que usan player_name dinámico
 def on_cazador():
     global message
-    message = launch_script("modo_cazador.py", player_name)
-    # cerrar esta ventana para que quede solo la ventana del modo
-    pygame.quit()
-    sys.exit(0)
+    message = ""  # opcional: limpiar mensaje
+    # Llamamos al modo directamente dentro del mismo proceso
+    modo_cazador.run()
+    # Cuando el modo termine, volvemos aquí y se vuelve a mostrar la selección
 
 def on_escapa():
     global message
-    message = launch_script("modo_escapa.py", player_name)
-    pygame.quit()
-    sys.exit(0)
+    message = ""
+    modo_escapa.run()
 
 def on_quit():
     pygame.quit()
@@ -163,6 +146,7 @@ buttons = [
         ("Salir (ESC)", lambda: on_quit())
     ])
 ]
+
 
 # -------------------------
 # Dibujo UI
@@ -181,7 +165,11 @@ def draw_registration():
     # input box
     pygame.draw.rect(SCREEN, COL_INPUT_BG, input_rect, border_radius=6)
     pygame.draw.rect(SCREEN, (100,100,100), input_rect, 2, border_radius=6)
-    name_surf = FONT.render(player_name if player_name else "Escribe tu nombre...", True, COL_INPUT_TEXT if player_name else (120,120,120))
+    name_surf = FONT.render(
+        player_name if player_name else "Escribe tu nombre...",
+        True,
+        COL_INPUT_TEXT if player_name else (120,120,120)
+    )
     SCREEN.blit(name_surf, (input_rect.x + 8, input_rect.y + (input_rect.height - name_surf.get_height())//2))
 
     # continuar button
@@ -271,6 +259,13 @@ def handle_event(e):
 # Bucle principal
 # -------------------------
 def main():
+    global SCREEN, SIZE
+    # Reasegurar que usamos la ventana actual (por si main cambió algo)
+    surf = pygame.display.get_surface()
+    if surf is not None:
+        SCREEN = surf
+        SIZE = SCREEN.get_size()
+
     while True:
         for e in pygame.event.get():
             handle_event(e)
