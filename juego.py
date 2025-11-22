@@ -5,6 +5,9 @@ import pygame
 import json
 import modo_cazador
 import modo_escapa
+from puntajes import guardar_puntaje
+from puntajes import evaluar_y_guardar_puntaje
+
 
 # -------------------------
 # Configuración / Constantes
@@ -60,6 +63,10 @@ registered = False       # si ya completó el registro
 message = ""             # mensaje informativo en pantalla
 
 PLAYERS_FILE = os.path.join(BASE_DIR, "players.json")
+
+# control del bucle principal: True mientras se ejecuta este módulo,
+# pasar a False para volver al menú principal (main.py)
+running = True
 
 def load_players():
     try:
@@ -123,19 +130,43 @@ start_y = SIZE[1]//2 - (btn_h*3 + gap*2)//2 + 40
 
 def on_cazador():
     global message
-    message = ""  # opcional: limpiar mensaje
-    # Llamamos al modo directamente dentro del mismo proceso
-    modo_cazador.run()
-    # Cuando el modo termine, volvemos aquí y se vuelve a mostrar la selección
+    message = ""
+    try:
+        puntaje = modo_cazador.run()
+    except Exception as ex:
+        print("Error ejecutando modo cazador:", ex)
+        puntaje = None
+
+    if isinstance(puntaje, int):
+        pos, top5 = evaluar_y_guardar_puntaje(player_name, puntaje, modo="cazador")
+        if pos is not None and pos <= 5:
+            message = f"Puntaje guardado: {puntaje} (Top {pos})"
+        else:
+            message = f"Puntaje guardado: {puntaje} (posición {pos})" if pos else f"Puntaje guardado: {puntaje}"
+    else:
+        message = "Modo terminado (sin puntaje devuelto)."
 
 def on_escapa():
     global message
     message = ""
-    modo_escapa.run()
+    try:
+        puntaje = modo_escapa.run()
+    except Exception as ex:
+        print("Error ejecutando modo escapa:", ex)
+        puntaje = None
+
+    if isinstance(puntaje, int):
+        pos, top5 = evaluar_y_guardar_puntaje(player_name, puntaje, modo="escapa")
+        if pos is not None and pos <= 5:
+            message = f"Puntaje guardado: {puntaje} (Top {pos})"
+        else:
+            message = f"Puntaje guardado: {puntaje} (posición {pos})" if pos else f"Puntaje guardado: {puntaje}"
+    else:
+        message = "Modo terminado (sin puntaje devuelto)."
 
 def on_quit():
-    pygame.quit()
-    sys.exit(0)
+    global running
+    running = False
 
 # Botones de selección (se dibujan solo tras el registro)
 buttons = [
@@ -217,17 +248,18 @@ def submit_registration():
 # Manejo de eventos
 # -------------------------
 def handle_event(e):
-    global player_name, input_active, message, registered
+    global player_name, input_active, message, registered, running
     if e.type == pygame.QUIT:
-        pygame.quit()
-        sys.exit(0)
+        # volver al menú principal en vez de salir de la app
+        on_quit()
 
     if not registered:
         # entrada de texto para nombre
         if e.type == pygame.KEYDOWN:
             if e.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit(0)
+                # volver al menú principal
+                on_quit()
+                return
             elif e.key == pygame.K_RETURN:
                 submit_registration()
             elif e.key == pygame.K_BACKSPACE:
@@ -246,8 +278,8 @@ def handle_event(e):
         # después del registro: selección de modo y atajos
         if e.type == pygame.KEYDOWN:
             if e.key == pygame.K_ESCAPE:
-                pygame.quit()
-                sys.exit(0)
+                # volver al menú principal
+                on_quit()
             if e.key == pygame.K_1:
                 on_cazador()
             if e.key == pygame.K_2:
@@ -259,14 +291,15 @@ def handle_event(e):
 # Bucle principal
 # -------------------------
 def main():
-    global SCREEN, SIZE
+    global SCREEN, SIZE, running
     # Reasegurar que usamos la ventana actual (por si main cambió algo)
     surf = pygame.display.get_surface()
     if surf is not None:
         SCREEN = surf
         SIZE = SCREEN.get_size()
 
-    while True:
+    running = True
+    while running:
         for e in pygame.event.get():
             handle_event(e)
         if not registered:
@@ -275,6 +308,9 @@ def main():
             draw_selection()
         pygame.display.flip()
         CLOCK.tick(60)
+
+    # Al salir del loop, simplemente retornamos al menú (no cerramos pygame)
+    return
 
 if __name__ == "__main__":
     main()

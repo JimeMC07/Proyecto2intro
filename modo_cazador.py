@@ -665,8 +665,8 @@ def run():
                 elif btn_retry_rect is not None and btn_retry_rect.collidepoint(mx, my):
                     reiniciar_partida()
                 elif btn_exit_rect is not None and btn_exit_rect.collidepoint(mx, my):
-                    pygame.quit()
-                    sys.exit()
+                    # salir del modo y volver al menú principal (no cerrar toda la app)
+                    running = False
 
         # dash logic
         if corriendo and dash_pasos_restantes > 0:
@@ -706,6 +706,6 @@ def run():
         pygame.display.flip()
 
     # al salir del modo, no hacemos pygame.quit() para no cerrar todo el juego
-    return
+    return puntos
 
 # EOF

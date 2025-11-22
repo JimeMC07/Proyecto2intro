@@ -2,7 +2,8 @@ import os  # Para manejo de rutas y archivos
 import sys  # Para obtener el intérprete de Python actual, esto para lanzar subprocesos
 import subprocess  # Para lanzar otros scripts como subprocesos, esto para no bloquear la UI
 import pygame
-import json  # Para manejo de archivos JSON (puntajes y configuraciones)
+import json# Para manejo de archivos JSON (puntajes y configuraciones)
+import puntajes
 # OJO: aquí ya NO importamos juego todavía
 
 # -------------------------
@@ -21,9 +22,23 @@ try:
         pygame.mixer.music.set_volume(0.55)  
         pygame.mixer.music.play(-1)    
     else:
-        print("⚠️ No se encontró la música del menú:", music_path)
+        print("No se encontró la música del menú:", music_path)
 except Exception as e:
     print("Error cargando música del menú:", e)
+
+# Estado de sonido / UI de config
+try:
+    volumen_actual = pygame.mixer.music.get_volume()
+except Exception:
+    volumen_actual = 0.55
+sonido_habilitado = True
+
+# rects interactivos en la pantalla de config (se definen en draw_config)
+SOUND_CHECK_RECT = None
+VOL_MINUS_RECT = None
+VOL_PLUS_RECT = None
+CONTROLS_AREA_RECT = None
+
 
 WIDTH, HEIGHT = 640, 480
 SCREEN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
@@ -41,21 +56,6 @@ COLOR_BTN = (40, 120, 200)
 COLOR_BTN_HOVER = (60, 150, 230)
 COLOR_TEXT = (255, 255, 255)
 COLOR_PANEL = (30, 40, 50)
-
-# -------------------------
-# Gestión de puntajes (I/O)
-# -------------------------
-def load_scores():
-    path = os.path.join(BASE_DIR, "scores.json")
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        # No se propaga la excepción para mantener la UI estable
-        print("Error cargando scores.json:", e)
-        return []
 
 # -------------------------
 # Lanzamiento de la pantalla de selección (juego.py)
@@ -96,12 +96,12 @@ class Button:
 # Estado de la UI y callbacks de pantalla
 # -------------------------
 state = "menu"  # posibles: "menu", "scores", "config"
-scores_cache = load_scores()
+scores_cache = puntajes.cargar_puntajes()
 selected_conf = {"num_enemies": 3, "enemy_speed_ms": 400}
 
 def show_scores():
     global state, scores_cache
-    scores_cache = load_scores()
+    scores_cache = puntajes.cargar_puntajes()
     state = "scores"
 
 def show_config():
@@ -146,40 +146,137 @@ def draw_scores():
     SCREEN.fill(COLOR_BG)
     panel = pygame.Rect(60, 60, WIDTH-120, HEIGHT-120)
     pygame.draw.rect(SCREEN, COLOR_PANEL, panel, border_radius=8)
-    title = FONT.render("Top Puntajes (Modo Cazador - ejemplo)", True, COLOR_TEXT)
+    title = FONT.render("Top 5 Puntajes por Modo", True, COLOR_TEXT)
     SCREEN.blit(title, (panel.x + 16, panel.y + 12))
+
     y = panel.y + 56
-    if not scores_cache:
-        nof = SMALL.render("No hay puntajes guardados. Juega para generar uno.", True, COLOR_TEXT)
-        SCREEN.blit(nof, (panel.x + 16, y))
+    ultimo = puntajes.obtener_ultimo_resultado()
+    # Top 5 Cazador
+    cazador_list = puntajes.cargar_puntajes(modo="cazador") or []
+    try:
+        top_cazador = sorted(cazador_list, key=lambda e: e.get("score", 0), reverse=True)[:5]
+    except Exception:
+        top_cazador = cazador_list[:5]
+
+    header_c = SMALL.render("Cazador — Top 5", True, COLOR_TEXT)
+    SCREEN.blit(header_c, (panel.x + 16, y))
+    y += 28
+    if not top_cazador:
+        none_txt = SMALL.render("Sin puntajes para Cazador.", True, COLOR_TEXT)
+        SCREEN.blit(none_txt, (panel.x + 16, y))
+        y += 28
     else:
-        for i, entry in enumerate(scores_cache[:10], start=1):
-            txt = SMALL.render(f"{i}. {entry.get('name','---')}  -  {entry.get('score',0)}", True, COLOR_TEXT)
-            SCREEN.blit(txt, (panel.x + 16, y))
-            y += 28
+        for i, e in enumerate(top_cazador, start=1):
+            nombre = e.get("name", "---")
+            punt = e.get("score", 0)
+            # resaltar si coincide con el último resultado guardado y es del mismo modo
+            extra = ""
+            color = COLOR_TEXT
+            if ultimo and ultimo.get("mode") == "cazador":
+                if ultimo.get("entry", {}).get("name") == e.get("name") and int(ultimo.get("entry", {}).get("score", 0)) == int(e.get("score", 0)):
+                    extra = f"   <-- TU (#{ultimo.get('pos')})"
+                    color = (240, 220, 80)
+            línea = SMALL.render(f"{i}. {nombre}  -  {punt}{extra}", True, color)
+            SCREEN.blit(línea, (panel.x + 16, y))
+            y += 24
+
+    y += 8  # separación entre secciones
+
+    # Top 5 Escapa
+    escapa_list = puntajes.cargar_puntajes(modo="escapa") or []
+    try:
+        top_escapa = sorted(escapa_list, key=lambda e: e.get("score", 0), reverse=True)[:5]
+    except Exception:
+        top_escapa = escapa_list[:5]
+
+    header_e = SMALL.render("Escapa — Top 5", True, COLOR_TEXT)
+    SCREEN.blit(header_e, (panel.x + 16, y))
+    y += 28
+    if not top_escapa:
+        none_txt = SMALL.render("Sin puntajes para Escapa.", True, COLOR_TEXT)
+        SCREEN.blit(none_txt, (panel.x + 16, y))
+        y += 28
+    else:
+        for i, e in enumerate(top_escapa, start=1):
+            nombre = e.get("name", "---")
+            punt = e.get("score", 0)
+            extra = ""
+            color = COLOR_TEXT
+            if ultimo and ultimo.get("mode") == "escapa":
+                if ultimo.get("entry", {}).get("name") == e.get("name") and int(ultimo.get("entry", {}).get("score", 0)) == int(e.get("score", 0)):
+                    extra = f"   <-- TU (#{ultimo.get('pos')})"
+                    color = (240, 220, 80)
+            línea = SMALL.render(f"{i}. {nombre}  -  {punt}{extra}", True, color)
+            SCREEN.blit(línea, (panel.x + 16, y))
+            y += 24
+
     back = SMALL.render("Presiona ESC o clic en pantalla para volver", True, COLOR_TEXT)
     SCREEN.blit(back, (panel.centerx - back.get_width()//2, panel.bottom - 34))
 
 def draw_config():
+    global SOUND_CHECK_RECT, VOL_MINUS_RECT, VOL_PLUS_RECT, CONTROLS_AREA_RECT, volumen_actual, sonido_habilitado
     SCREEN.fill(COLOR_BG)
     panel = pygame.Rect(80, 60, WIDTH-160, HEIGHT-120)
     pygame.draw.rect(SCREEN, COLOR_PANEL, panel, border_radius=8)
-    title = FONT.render("Configuraciones (temporal)", True, COLOR_TEXT)
+    title = FONT.render("Configuraciones", True, COLOR_TEXT)
     SCREEN.blit(title, (panel.x + 16, panel.y + 12))
-    lines = [
-        f"Cantidad de enemigos: {selected_conf['num_enemies']}",
-        f"Velocidad enemigos (ms tick): {selected_conf['enemy_speed_ms']}",
-        "Usa teclas: N/n aumentar, M/m disminuir (enemigos).",
-        "Presiona G para guardar (archivo config.json)."
-    ]
+
     y = panel.y + 56
-    for line in lines:
-        txt = SMALL.render(line, True, COLOR_TEXT)
-        SCREEN.blit(txt, (panel.x + 16, y))
-        y += 28
+
+    # Sección: Sonido
+    sub = SMALL.render("Sonido", True, COLOR_TEXT)
+    SCREEN.blit(sub, (panel.x + 16, y))
+    # casilla ON/OFF
+    check_rect = pygame.Rect(panel.x + 140, y, 20, 20)
+    SOUND_CHECK_RECT = check_rect
+    pygame.draw.rect(SCREEN, (200,200,200), check_rect, border_radius=3)
+    if sonido_habilitado:
+        pygame.draw.rect(SCREEN, (60,200,80), check_rect.inflate(-4,-4), border_radius=2)
+    else:
+        pygame.draw.line(SCREEN, (200,50,50), check_rect.topleft, check_rect.bottomright, 2)
+        pygame.draw.line(SCREEN, (200,50,50), check_rect.topright, check_rect.bottomleft, 2)
+
+    # Volumen actual (porcentaje) y botones +/- 
+    vol_pct = int(volumen_actual * 100)
+    vol_txt = SMALL.render(f"Volumen: {vol_pct}%", True, COLOR_TEXT)
+    SCREEN.blit(vol_txt, (panel.x + 16, y + 36))
+
+    minus = pygame.Rect(panel.x + 140, y + 32, 28, 28)
+    plus  = pygame.Rect(panel.x + 180, y + 32, 28, 28)
+    VOL_MINUS_RECT = minus
+    VOL_PLUS_RECT = plus
+    pygame.draw.rect(SCREEN, COLOR_BTN, minus, border_radius=4)
+    pygame.draw.rect(SCREEN, COLOR_BTN, plus, border_radius=4)
+    SCREEN.blit(SMALL.render("-", True, COLOR_TEXT), minus.center)
+    SCREEN.blit(SMALL.render("+", True, COLOR_TEXT), plus.center)
+
+    # Nota breve de controles de teclado para volumen/sonido
+    note = SMALL.render("Teclas: ↑ subir, ↓ bajar, S para activar/desactivar sonido", True, COLOR_TEXT)
+    SCREEN.blit(note, (panel.x + 16, y + 72))
+
+    y += 120
+
+    # Sección: Controles del juego (lista)
+    header = SMALL.render("Controles", True, COLOR_TEXT)
+    SCREEN.blit(header, (panel.x + 16, y))
+    y += 28
+    controls = [
+        "Moverse: Flechas ↑ ↓ ← →",
+        "Correr / Dash: Shift (mantener)",
+        "Interactuar / Seleccionar: Enter / Click",
+        "Retroceder / Menu: Esc",
+        "Activar trampas (si aplica): T (según modo)"
+    ]
+    CONTROLS_AREA_RECT = pygame.Rect(panel.x + 16, y, panel.width-32, 140)
+    cy = y
+    for c in controls:
+        SCREEN.blit(SMALL.render(c, True, COLOR_TEXT), (panel.x + 24, cy))
+        cy += 26
+
+    # Pie con instrucciones para volver
     back = SMALL.render("Presiona ESC o clic en pantalla para volver", True, COLOR_TEXT)
     SCREEN.blit(back, (panel.centerx - back.get_width()//2, panel.bottom - 34))
-
+    
 # -------------------------
 # Guardado de configuración
 # -------------------------
@@ -218,20 +315,72 @@ while True:
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     state = "menu"
-                elif event.key in (pygame.K_n, pygame.K_N):
+                elif event.key == pygame.K_n:
                     selected_conf["num_enemies"] += 1
-                elif event.key in (pygame.K_m, pygame.K_M):
+                elif event.key == pygame.K_m:
                     selected_conf["num_enemies"] = max(1, selected_conf["num_enemies"] - 1)
-                elif event.key in (pygame.K_u, pygame.K_U):
+                elif event.key == pygame.K_u:
                     selected_conf["enemy_speed_ms"] = max(50, selected_conf["enemy_speed_ms"] - 50)
-                elif event.key in (pygame.K_i, pygame.K_I):
+                elif event.key == pygame.K_i:
                     selected_conf["enemy_speed_ms"] += 50
-                elif event.key in (pygame.K_g, pygame.K_G):
+                elif event.key == pygame.K_g:
                     save_config()
-            # Clic también vuelve al menú
+                # NUEVAS TECLAS: volumen y sonido
+                elif event.key == pygame.K_UP:
+                    volumen_actual = min(1.0, volumen_actual + 0.05)
+                    try:
+                        pygame.mixer.music.set_volume(volumen_actual)
+                    except Exception:
+                        pass
+                elif event.key == pygame.K_DOWN:
+                    volumen_actual = max(0.0, volumen_actual - 0.05)
+                    try:
+                        pygame.mixer.music.set_volume(volumen_actual)
+                    except Exception:
+                        pass
+                elif event.key == pygame.K_s:
+                    sonido_habilitado = not sonido_habilitado
+                    try:
+                        if sonido_habilitado:
+                            pygame.mixer.music.set_volume(volumen_actual)
+                            if not pygame.mixer.music.get_busy():
+                                pygame.mixer.music.play(-1)
+                        else:
+                            pygame.mixer.music.set_volume(0.0)
+                        # no detener la reproducción para mantener posición
+                    except Exception:
+                        pass
+            # Clic también vuelve al menú o interactúa con los controles UI
             if event.type == pygame.MOUSEBUTTONDOWN:
-                state = "menu"
-
+                mx, my = event.pos
+                # clic general vuelve al menú
+                # pero detectamos si hacen click sobre los controles interactivos
+                if SOUND_CHECK_RECT and SOUND_CHECK_RECT.collidepoint(mx, my):
+                    sonido_habilitado = not sonido_habilitado
+                    try:
+                        if sonido_habilitado:
+                            pygame.mixer.music.set_volume(volumen_actual)
+                            if not pygame.mixer.music.get_busy():
+                                pygame.mixer.music.play(-1)
+                        else:
+                            pygame.mixer.music.set_volume(0.0)
+                    except Exception:
+                        pass
+                elif VOL_MINUS_RECT and VOL_MINUS_RECT.collidepoint(mx, my):
+                    volumen_actual = max(0.0, volumen_actual - 0.05)
+                    try:
+                        pygame.mixer.music.set_volume(volumen_actual if sonido_habilitado else 0.0)
+                    except Exception:
+                        pass
+                elif VOL_PLUS_RECT and VOL_PLUS_RECT.collidepoint(mx, my):
+                    volumen_actual = min(1.0, volumen_actual + 0.05)
+                    try:
+                        pygame.mixer.music.set_volume(volumen_actual if sonido_habilitado else 0.0)
+                    except Exception:
+                        pass
+                else:
+                    # clic fuera de controles regresa al menú
+                    state = "menu"
     # Render según estado
     if state == "menu":
         draw_menu()
