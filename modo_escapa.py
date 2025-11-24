@@ -656,6 +656,7 @@ def run():
     global puntos, tiempo_restante, juego_terminado, victoria, energia_segmentos
     global corriendo, jugador_dir_dx, jugador_dir_dy
     global message, last_trap_time
+    global running
 
     # recuperar o crear la superficie
     screen = pygame.display.get_surface()
@@ -743,16 +744,17 @@ def run():
         # Eventos
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return_to_menu()   # NO pygame.quit() aquí
+                running = False   # salir del modo escapa
+
 
             if juego_terminado:
                 if event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_q):
-                        return_to_menu()
+                        running = False
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mx, my = event.pos
                     if btn_menu_rect is not None and btn_menu_rect.collidepoint(mx, my):
-                        return_to_menu()
+                        running = False
                     elif btn_retry_rect is not None and btn_retry_rect.collidepoint(mx, my):
                         reiniciar_partida()
                     elif btn_exit_rect is not None and btn_exit_rect.collidepoint(mx, my):
@@ -762,8 +764,10 @@ def run():
 
             if not pre_count_active and event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    return_to_menu()
+                    running = False
                 elif event.key == pygame.K_UP:
+                    ...
+
                     mover_jugador(0, -1)
                 elif event.key == pygame.K_DOWN:
                     mover_jugador(0, 1)

@@ -48,6 +48,7 @@ corriendo = False
 jugador_dir_dx = 0
 jugador_dir_dy = 0
 
+
 # jugador (coordenadas en casillas)
 jugador_x = 1
 jugador_y = 1
@@ -70,6 +71,12 @@ last_enemy_tick = 0
 last_timer_tick = 0
 dash_pasos_restantes = 0
 last_dash_step_tick = 0
+
+# pre-partida: countdown 3..0
+pre_count = 3
+pre_count_active = True
+pre_last_tick = 0
+
 
 # rects botones game over (se calculan en tiempo de dibujado)
 btn_menu_rect = None
@@ -565,6 +572,7 @@ def run():
     global last_enemy_tick, last_timer_tick, dash_pasos_restantes, last_dash_step_tick
     global puntos, tiempo_restante, juego_terminado, energia_segmentos
     global corriendo, jugador_dir_dx, jugador_dir_dy
+    global pre_count, pre_count_active, pre_last_tick
 
     # recuperar la superficie creada por main.py
     screen = pygame.display.get_surface()
@@ -588,6 +596,7 @@ def run():
 
     # fuentes
     font_local = pygame.font.SysFont("consolas", 20, bold=True)
+    big_font = pygame.font.SysFont("consolas", 96, bold=True)
 
     # calculo de tamaños y offsets
     usable_width  = screen_width - PANEL_W - 2 * MARGEN_X
@@ -634,6 +643,11 @@ def run():
     dash_pasos_restantes = 0
     last_dash_step_tick = now
 
+    # inicio del conteo 3..0 antes de empezar
+    pre_count = 3
+    pre_count_active = True
+    pre_last_tick = now
+
     running = True
     while running:
         dt = clock.tick(60)
@@ -644,10 +658,16 @@ def run():
             if event.type == pygame.QUIT:
                 running = False  # salir solo de este modo
 
-            if not juego_terminado and event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_UP:
+            # ESC siempre funciona, incluso en el conteo
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                running = False
+
+            # Controles normales SOLO después del conteo
+            if (not juego_terminado 
+                and not pre_count_active 
+                and event.type == pygame.KEYDOWN):
+
+                if event.key == pygame.K_UP:
                     mover_jugador(0, -1)
                 elif event.key == pygame.K_DOWN:
                     mover_jugador(0, 1)
@@ -668,15 +688,29 @@ def run():
                     pygame.quit()
                     sys.exit()
 
+        # --- Countdown pre-partida (3..2..1..0) ---
+        if pre_count_active:
+            if now - pre_last_tick >= 1000:  # cada 1 segundo
+                pre_last_tick = now
+                pre_count -= 1
+                if pre_count < 0:
+                    pre_count_active = False
+                    # arrancan enemigos y timer justo al terminar el conteo
+                    last_enemy_tick = now
+                    last_timer_tick = now
+
         # dash logic
-        if corriendo and dash_pasos_restantes > 0:
+        if corriendo and dash_pasos_restantes > 0 and not pre_count_active:
             if now - last_dash_step_tick >= DASH_STEP_MS:
                 last_dash_step_tick = now
                 dash_pasos_restantes -= 1
                 dash_paso(dash_pasos_restantes)
 
         # mover enemigos por ticks
-        if not juego_terminado and now - last_enemy_tick >= ENEMY_TICK_MS:
+        if (not juego_terminado 
+            and not pre_count_active 
+            and now - last_enemy_tick >= ENEMY_TICK_MS):
+
             last_enemy_tick = now
             mover_enemigos_tick(jugador_x, jugador_y)
 
@@ -685,7 +719,10 @@ def run():
         actualizar_animacion_jugador(now)
 
         # timer
-        if not juego_terminado and now - last_timer_tick >= 1000:
+        if (not juego_terminado 
+            and not pre_count_active 
+            and now - last_timer_tick >= 1000):
+
             last_timer_tick = now
             if tiempo_restante > 0:
                 tiempo_restante -= 1
@@ -703,9 +740,18 @@ def run():
         dibujar_leyenda(screen, font_local)
         dibujar_game_over(screen, font_local)
 
+        # Overlay del countdown (3..2..1..0)
+        if pre_count_active:
+            overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 150))
+            screen.blit(overlay, (0, 0))
+
+            if pre_count >= 0:
+                txt_surf = big_font.render(str(pre_count), True, (255, 255, 255))
+                rect = txt_surf.get_rect(center=(screen_width // 2, screen_height // 2))
+                screen.blit(txt_surf, rect)
+
         pygame.display.flip()
 
     # al salir del modo, no hacemos pygame.quit() para no cerrar todo el juego
     return
-
-# EOF
