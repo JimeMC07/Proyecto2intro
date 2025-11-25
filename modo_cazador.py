@@ -1,6 +1,5 @@
-# modo_cazador.py (versión corregida)
-# --- No ejecutar nada al importarse: todo lo dependiente de pantalla va dentro de run() ---
-
+################################################################################################################################
+#----------------------------------------------------------Imports-------------------------------------------------------------#
 import pygame
 import random
 import sys
@@ -9,37 +8,28 @@ import mapa
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ------------------ Parámetros del laberinto ------------------
 COLUMNAS = 19
 FILAS = 13
 
-# tamaño_celda se calculará en run() según la pantalla
 tamaño_celda = 40
 
-# ------------------ Parámetros de enemigos ------------------
+# ------------------------------------------------------ Parámetros de enemigos -----------------------------------------------#
 NUM_ENEMIGOS   = 3
-ENEMY_TICK_MS  = 400
+VEL_ENEMIGOS  = 400
 RADIO_PELIGRO  = 3
-ENEMY_MOVE_DURATION_MS = 300
-
-# ------------------ PUNTOS ------------------
+DURACION_MOVIMIENTO_ENEMIGOS = 300
+# ------------------------------------------------------ Parámetros de puntuación ----------------------------------------------#
 PUNTOS_INICIALES   = 800
 PUNTOS_POR_CAPTURA = 200
 PUNTOS_POR_ESCAPE  = 100
-
-# ------------------ TIMER ------------------
+# ------------------------------------------------------ Parámetros de tiempo -----------------------------------------------#
 TIEMPO_INICIAL = 20
-
-# ------------------ ENERGÍA / CARRERA ------------------
+# ------------------------------------------------------ Parámetros de energía ----------------------------------------------#
 ENERGIA_MAX_SEGMENTOS = 4
-
-# --- JUGADOR SUAVE ---
 PLAYER_MOVE_DURATION_MS = 120
-
-# --- DASH TICKS ---
 DASH_STEP_MS = 60
 
-# ------------------ Estado global (valores por defecto; se re-inicializan en run) ----
+# ------------------------------------------------------ Variables globales de estado ----------------------------------------#
 puntos = PUNTOS_INICIALES
 juego_terminado = False
 tiempo_restante = TIEMPO_INICIAL
@@ -47,13 +37,9 @@ energia_segmentos = ENERGIA_MAX_SEGMENTOS
 corriendo = False
 jugador_dir_dx = 0
 jugador_dir_dy = 0
-
-
-# jugador (coordenadas en casillas)
 jugador_x = 1
 jugador_y = 1
 
-# posición de renderizado (pixeles relativos a la grilla) - se manejan en run()
 player_render_x = 0
 player_render_y = 0
 player_moving = False
@@ -63,27 +49,21 @@ player_start_py = 0
 player_target_px = 0
 player_target_py = 0
 
-# enemigos (lista de dicts) - se poblarán en run()
 enemigos = []
 
-# ticks / temporizadores - se inicializan en run()
 last_enemy_tick = 0
 last_timer_tick = 0
 dash_pasos_restantes = 0
 last_dash_step_tick = 0
 
-# pre-partida: countdown 3..0
-pre_count = 3
-pre_count_active = True
-pre_last_tick = 0
+cuenta_regresiva = 3
+cuenta_regresiva_activa = True
+tick_previo_preconteo = 0
 
-
-# rects botones game over (se calculan en tiempo de dibujado)
 btn_menu_rect = None
 btn_retry_rect = None
 btn_exit_rect = None
 
-# variables de pantalla/ UI que se calculan en run()
 screen = None
 screen_width = 0
 screen_height = 0
@@ -95,8 +75,10 @@ alto = 0
 offset_x = 0
 offset_y = 0
 
-# ------------------ Helper: texto envuelto ------------------
-def draw_text_wrapped(surface, text, x, y, font, color, max_width):
+################################################################################################################################
+################################################## Helpers y funciones #########################################################
+#-------------------------------------Función para dibujar texto con salto de línea automático---------------------------------#
+def texto_con_saltos(surface, text, x, y, font, color, max_width):
     words = text.split(" ")
     line = ""
     for word in words:
@@ -112,31 +94,34 @@ def draw_text_wrapped(surface, text, x, y, font, color, max_width):
         y += font.get_height() + 4
     return y
 
-# ------------------ Crear laberinto ------------------
+# ------------------------------------------------------- Crear laberinto -----------------------------------------------------#
 def crear_laberinto_basico():
     lab, sx, sy = mapa.generate_map(COLUMNAS, FILAS, start=(1, 1))
     return lab, sx, sy
 
-# ------------------ Caminabilidad ------------------
+#-----------------------------------------------Comprobaciones de celdas caminables jugador------------------------------------#
 def celda_es_caminable(x, y, laberinto_local):
     if not (0 <= y < FILAS and 0 <= x < COLUMNAS):
         return False
     v = laberinto_local[y][x]
     return v in (mapa.CAMINO, mapa.SALIDA, mapa.LIANA)
 
+#-----------------------------------------------Comprobaciones de celdas caminables enemigo-------------------------------------#
 def celda_es_caminable_enemigo(x, y, laberinto_local):
     if not (0 <= y < FILAS and 0 <= x < COLUMNAS):
         return False
     v = laberinto_local[y][x]
     return v in (mapa.CAMINO, mapa.SALIDA, mapa.TUNEL)
 
+# -------------------------------------------------------- Distancia Manhattan ------------------------------------------------#
 def distancia_manhattan(x1, y1, x2, y2):
     return abs(x1 - x2) + abs(y1 - y2)
 
-# ------------------ Posiciones / respawn enemigos ------------------
+#------------------------------------------------------- Posiciones enemigos --------------------------------------------------#
 def posiciones_enemigos():
     return {(e["x"], e["y"]) for e in enemigos}
 
+# ------------------------------------------------------- Respawnear enemigo --------------------------------------------------#
 def respawnear_enemigo(enemigo, laberinto_local, salida_x, salida_y, jugador_x_local, jogador_y_local):
     posibles = []
     ocupadas = posiciones_enemigos() - {(enemigo["x"], enemigo["y"])}
@@ -163,7 +148,7 @@ def respawnear_enemigo(enemigo, laberinto_local, salida_x, salida_y, jugador_x_l
     enemigo["target_px"] = enemigo["render_x"]
     enemigo["target_py"] = enemigo["render_y"]
 
-# ------------------ Comprobaciones ------------------
+# ----------------------------------------------------- Comprobar captura -----------------------------------------------------#
 def comprobar_captura(jugador_x_local, jugador_y_local):
     global puntos, energia_segmentos
     if juego_terminado:
@@ -175,6 +160,7 @@ def comprobar_captura(jugador_x_local, jugador_y_local):
                 energia_segmentos += 1
             respawnear_enemigo(enemigo, laberinto, salida_x, salida_y, jugador_x_local, jugador_y_local)
 
+# ------------------------------------------------------ Comprobar salida ------------------------------------------------------#
 def comprobar_salida():
     global puntos, juego_terminado
     if juego_terminado:
@@ -187,7 +173,7 @@ def comprobar_salida():
         puntos = 0
         game_over(motivo="puntos")
 
-# ------------------ IA enemigos ------------------
+# ------------------------------------------------------- Mover enemigos ------------------------------------------------------#
 def mover_un_enemigo(enemigo, jugador_x_local, jugador_y_local):
     if juego_terminado:
         return
@@ -231,6 +217,7 @@ def mover_un_enemigo(enemigo, jugador_x_local, jugador_y_local):
         enemigo["x"] = mejor_x
         enemigo["y"] = mejor_y
 
+# --------------------------------------------------- Mover enemigos tick ---------------------------------------------------#
 def mover_enemigos_tick(jugador_x_local, jugador_y_local):
     if juego_terminado:
         return
@@ -239,20 +226,23 @@ def mover_enemigos_tick(jugador_x_local, jugador_y_local):
     comprobar_captura(jugador_x_local, jugador_y_local)
     comprobar_salida()
 
-# ------------------ Game Over / fin ------------------
+################################################################################################################################
+############################################## Animaciones fin de juego ########################################################
+# ----------------------------------------------------- Game Over -------------------------------------------------------------#
 def game_over(motivo="puntos"):
     global juego_terminado
     if juego_terminado:
         return
     juego_terminado = True
 
+# --------------------------------------------------- Fin partida por tiempo --------------------------------------------------#
 def fin_partida_por_tiempo():
     global juego_terminado
     if juego_terminado:
         return
     juego_terminado = True
 
-# ------------------ Movimiento jugador ------------------
+# -------------------------------------------------------- Mover jugador ------------------------------------------------------#
 def mover_jugador(dx, dy):
     global jugador_x, jugador_y, jugador_dir_dx, jugador_dir_dy
     global player_moving, player_move_start_time
@@ -281,6 +271,7 @@ def mover_jugador(dx, dy):
 
     comprobar_captura(jugador_x, jugador_y)
 
+# -------------------------------------------------------- Dash jugador -------------------------------------------------------#
 def dash_paso(pasos_restantes):
     global jugador_x, jugador_y, corriendo, dash_pasos_restantes
 
@@ -317,8 +308,9 @@ def activar_carrera():
     energia_segmentos = 0
     corriendo = True
     dash_pasos_restantes = 4
-
-# ------------------ Reiniciar ------------------
+################################################################################################################################
+################################################### Reincio de partida #########################################################
+# ----------------------------------------------------- Reiniciar partida ---------------------------------------------------#
 def reiniciar_partida():
     global puntos, tiempo_restante, juego_terminado
     global energia_segmentos, corriendo, jugador_dir_dx, jugador_dir_dy
@@ -372,7 +364,9 @@ def reiniciar_partida():
     dash_pasos_restantes = 0
     last_dash_step_tick = now
 
-# ------------------ DIBUJOS ------------------
+################################################################################################################################
+################################################## Dibujo de elementos #########################################################
+# ----------------------------------------------------- Dibujar laberinto ---------------------------------------------------#
 def dibujar_laberinto(surface):
     for fila in range(FILAS):
         for col in range(COLUMNAS):
@@ -391,6 +385,7 @@ def dibujar_laberinto(surface):
                 color = (17, 25, 34)
             pygame.draw.rect(surface, color, (x, y, tamaño_celda, tamaño_celda))
 
+# ------------------------------------------------- Dibujar panel lateral ----------------------------------------------------#
 def dibujar_leyenda(surface, font_local):
     panel_w = PANEL_W - 24
     panel_h = alto - 20
@@ -423,16 +418,17 @@ def dibujar_leyenda(surface, font_local):
         pygame.draw.rect(surface, col, (x, box_y, box_size, box_size))
         text_x = x + box_size + 10
         max_text_width = (panel_x + panel_w - 20) - text_x
-        y = draw_text_wrapped(surface, label, text_x, box_y, small, (230,230,230), max_text_width)
+        y = texto_con_saltos(surface, label, text_x, box_y, small, (230,230,230), max_text_width)
         y += 6
 
     y += 10
     max_text_width = panel_w - 40
-    y = draw_text_wrapped(surface, "Objetivo: atrapar enemigos antes de que crucen la salida.", x, y, small, (220,220,220), max_text_width)
-    y = draw_text_wrapped(surface, "Flechas: mover al cazador. Shift: correr 4 casillas.", x, y, small, (200,200,200), max_text_width)
-    y = draw_text_wrapped(surface, "La barra verde se vacía al correr y se rellena con enemigos capturados.", x, y, small, (200,200,200), max_text_width)
-    y = draw_text_wrapped(surface, "+200 puntos por captura. -100 puntos si un enemigo escapa.", x, y, small, (200,200,200), max_text_width)
+    y = texto_con_saltos(surface, "Objetivo: atrapar enemigos antes de que crucen la salida.", x, y, small, (220,220,220), max_text_width)
+    y = texto_con_saltos(surface, "Flechas: mover al cazador. Shift: correr 4 casillas.", x, y, small, (200,200,200), max_text_width)
+    y = texto_con_saltos(surface, "La barra verde se vacía al correr y se rellena con enemigos capturados.", x, y, small, (200,200,200), max_text_width)
+    y = texto_con_saltos(surface, "+200 puntos por captura. -100 puntos si un enemigo escapa.", x, y, small, (200,200,200), max_text_width)
 
+# ----------------------------------------------------- Dibujar jugador ------------------------------------------------------#
 def dibujar_jugador(surface):
     px = offset_x + player_render_x
     py = offset_y + player_render_y
@@ -441,6 +437,7 @@ def dibujar_jugador(surface):
     pygame.draw.ellipse(surface, (0,200,200), rect)
     pygame.draw.ellipse(surface, (255,255,255), rect, 2)
 
+# ----------------------------------------------------- Dibujar enemigos -----------------------------------------------------#
 def dibujar_enemigos(surface):
     margin = 6
     for enemigo in enemigos:
@@ -450,6 +447,7 @@ def dibujar_enemigos(surface):
         pygame.draw.ellipse(surface, (200,60,60), rect)
         pygame.draw.ellipse(surface, (255,255,255), rect, 2)
 
+# ----------------------------------------------------- Dibujar textos ------------------------------------------------------#
 def dibujar_textos(surface, font_local):
     center_x = offset_x + ancho // 2
     txt = font_local.render(f"Puntos: {puntos}", True, (255,255,255))
@@ -459,6 +457,7 @@ def dibujar_textos(surface, font_local):
     rect2 = txt2.get_rect(midright=(offset_x + ancho - 10, offset_y + 20))
     surface.blit(txt2, rect2)
 
+# ---------------------------------------------------- Dibujar barra energía ---------------------------------------------------#
 def dibujar_barra_energia(surface):
     base_x = offset_x + jugador_x * tamaño_celda
     base_y = offset_y + jugador_y * tamaño_celda - 8
@@ -471,6 +470,7 @@ def dibujar_barra_energia(surface):
         pygame.draw.rect(surface, color, rect)
         pygame.draw.rect(surface, (255,255,255), rect, 1)
 
+# --------------------------------------------------- Dibujar pantalla Game Over ------------------------------------------------#
 def dibujar_game_over(surface, font_local):
     global btn_menu_rect, btn_retry_rect, btn_exit_rect
     if not juego_terminado:
@@ -527,14 +527,16 @@ def dibujar_game_over(surface, font_local):
     dibujar_boton(btn_retry_rect, "Reiniciar")
     dibujar_boton(btn_exit_rect, "Salir")
 
-# ------------------ Animaciones ------------------
+##################################################################################################################################
+############################################## Animaciones de movimiento #########################################################
+# ----------------------------------------------- Actualizar animación enemigos ------------------------------------------------#
 def actualizar_animacion_enemigos(now):
     for enemigo in enemigos:
         if not enemigo.get("moving", False):
             enemigo["render_x"] = enemigo["x"] * tamaño_celda
             enemigo["render_y"] = enemigo["y"] * tamaño_celda
             continue
-        t = (now - enemigo["move_start_time"]) / ENEMY_MOVE_DURATION_MS
+        t = (now - enemigo["move_start_time"]) / DURACION_MOVIMIENTO_ENEMIGOS
         if t >= 1.0:
             enemigo["render_x"] = enemigo["target_px"]
             enemigo["render_y"] = enemigo["target_py"]
@@ -547,6 +549,7 @@ def actualizar_animacion_enemigos(now):
             enemigo["render_x"] = sx + (tx - sx) * t
             enemigo["render_y"] = sy + (ty - sy) * t
 
+# ------------------------------------------------- Actualizar animación jugador ------------------------------------------------#
 def actualizar_animacion_jugador(now):
     global player_render_x, player_render_y, player_moving
     if not player_moving:
@@ -562,7 +565,9 @@ def actualizar_animacion_jugador(now):
         player_render_x = player_start_px + (player_target_px - player_start_px) * t
         player_render_y = player_start_py + (player_target_py - player_start_py) * t
 
-# ------------------ RUN (inicializa todo lo dependiente de la pantalla) ------------------
+##################################################################################################################################
+######################################################### Main loop ##############################################################
+#--------------------------------------------------------- Run --------------------------------------------------------------#
 def run():
     global screen, screen_width, screen_height
     global ancho, alto, offset_x, offset_y, tamaño_celda
@@ -572,19 +577,16 @@ def run():
     global last_enemy_tick, last_timer_tick, dash_pasos_restantes, last_dash_step_tick
     global puntos, tiempo_restante, juego_terminado, energia_segmentos
     global corriendo, jugador_dir_dx, jugador_dir_dy
-    global pre_count, pre_count_active, pre_last_tick
+    global cuenta_regresiva, cuenta_regresiva_activa, tick_previo_preconteo
 
-    # recuperar la superficie creada por main.py
     screen = pygame.display.get_surface()
     if screen is None:
-        # si se ejecuta directamente (no recomendado), crear pantalla
         pygame.init()
         screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
     screen_width, screen_height = screen.get_size()
     pygame.display.set_caption("Modo 2: Cazador - Pygame (sin imágenes)")
 
-    # cargar música del modo dentro de run (opcional, protegido)
     try:
         music_path = os.path.join(BASE_DIR, "musica_menu.mp3")
         if os.path.exists(music_path):
@@ -594,11 +596,9 @@ def run():
     except Exception:
         pass
 
-    # fuentes
     font_local = pygame.font.SysFont("consolas", 20, bold=True)
     big_font = pygame.font.SysFont("consolas", 96, bold=True)
 
-    # calculo de tamaños y offsets
     usable_width  = screen_width - PANEL_W - 2 * MARGEN_X
     usable_height = screen_height - 2 * MARGEN_Y
     tamaño_celda = min(usable_width // COLUMNAS, usable_height // FILAS)
@@ -610,17 +610,14 @@ def run():
     offset_x = (screen_width - (ancho + PANEL_W)) // 2
     offset_y = (screen_height - alto) // 2
 
-    # inicializar mapa y posiciones
     laberinto, salida_x, salida_y = crear_laberinto_basico()
 
-    # inicializar jugador
     jugador_x = 1
     jugador_y = 1
     player_render_x = jugador_x * tamaño_celda
     player_render_y = jugador_y * tamaño_celda
     player_moving = False
 
-    # inicializar enemigos
     enemigos.clear()
     for _ in range(NUM_ENEMIGOS):
         enemigo = {
@@ -635,7 +632,6 @@ def run():
         enemigos.append(enemigo)
         respawnear_enemigo(enemigo, laberinto, salida_x, salida_y, jugador_x, jugador_y)
 
-    # inicializar ticks y estado
     clock = pygame.time.Clock()
     now = pygame.time.get_ticks()
     last_enemy_tick = now
@@ -643,28 +639,25 @@ def run():
     dash_pasos_restantes = 0
     last_dash_step_tick = now
 
-    # inicio del conteo 3..0 antes de empezar
-    pre_count = 3
-    pre_count_active = True
-    pre_last_tick = now
+    cuenta_regresiva = 3
+    cuenta_regresiva_activa = True
+    tick_previo_preconteo = now
 
     running = True
     while running:
         dt = clock.tick(60)
         now = pygame.time.get_ticks()
 
-        # --- Eventos ---
+        #---------------------------------------- Manejo de eventos ------------------------------------------------#
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False  # salir solo de este modo
+                running = False  
 
-            # ESC siempre funciona, incluso en el conteo
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 running = False
 
-            # Controles normales SOLO después del conteo
             if (not juego_terminado 
-                and not pre_count_active 
+                and not cuenta_regresiva_activa 
                 and event.type == pygame.KEYDOWN):
 
                 if event.key == pygame.K_UP:
@@ -688,39 +681,34 @@ def run():
                     pygame.quit()
                     sys.exit()
 
-        # --- Countdown pre-partida (3..2..1..0) ---
-        if pre_count_active:
-            if now - pre_last_tick >= 1000:  # cada 1 segundo
-                pre_last_tick = now
-                pre_count -= 1
-                if pre_count < 0:
-                    pre_count_active = False
-                    # arrancan enemigos y timer justo al terminar el conteo
+        #---------------------------------------- Lógica de cuenta regresiva ------------------------------------------------#
+        if cuenta_regresiva_activa:
+            if now - tick_previo_preconteo >= 1000:  
+                tick_previo_preconteo = now
+                cuenta_regresiva -= 1
+                if cuenta_regresiva < 0:
+                    cuenta_regresiva_activa = False
                     last_enemy_tick = now
                     last_timer_tick = now
 
-        # dash logic
-        if corriendo and dash_pasos_restantes > 0 and not pre_count_active:
+        if corriendo and dash_pasos_restantes > 0 and not cuenta_regresiva_activa:
             if now - last_dash_step_tick >= DASH_STEP_MS:
                 last_dash_step_tick = now
                 dash_pasos_restantes -= 1
                 dash_paso(dash_pasos_restantes)
 
-        # mover enemigos por ticks
         if (not juego_terminado 
-            and not pre_count_active 
-            and now - last_enemy_tick >= ENEMY_TICK_MS):
+            and not cuenta_regresiva_activa 
+            and now - last_enemy_tick >= VEL_ENEMIGOS):
 
             last_enemy_tick = now
             mover_enemigos_tick(jugador_x, jugador_y)
 
-        # animaciones
         actualizar_animacion_enemigos(now)
         actualizar_animacion_jugador(now)
-
-        # timer
+        #---------------------------------------- Lógica de temporizador ------------------------------------------------#
         if (not juego_terminado 
-            and not pre_count_active 
+            and not cuenta_regresiva_activa 
             and now - last_timer_tick >= 1000):
 
             last_timer_tick = now
@@ -730,7 +718,6 @@ def run():
                 tiempo_restante = 0
                 fin_partida_por_tiempo()
 
-        # dibujado
         screen.fill((0,0,0))
         dibujar_laberinto(screen)
         dibujar_enemigos(screen)
@@ -740,18 +727,16 @@ def run():
         dibujar_leyenda(screen, font_local)
         dibujar_game_over(screen, font_local)
 
-        # Overlay del countdown (3..2..1..0)
-        if pre_count_active:
+        if cuenta_regresiva_activa:
             overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
             overlay.fill((0, 0, 0, 150))
             screen.blit(overlay, (0, 0))
 
-            if pre_count >= 0:
-                txt_surf = big_font.render(str(pre_count), True, (255, 255, 255))
+            if cuenta_regresiva >= 0:
+                txt_surf = big_font.render(str(cuenta_regresiva), True, (255, 255, 255))
                 rect = txt_surf.get_rect(center=(screen_width // 2, screen_height // 2))
                 screen.blit(txt_surf, rect)
 
         pygame.display.flip()
 
-    # al salir del modo, no hacemos pygame.quit() para no cerrar todo el juego
     return

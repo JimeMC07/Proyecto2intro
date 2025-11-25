@@ -1,28 +1,21 @@
+################################################################################################################################
+#----------------------------------------------------------Imports-------------------------------------------------------------#
 import os
 import sys
-import subprocess  # (ya no lo usamos, pero lo dejo por si luego lo ocupas de nuevo)
+import subprocess 
 import pygame
 import json
 import modo_cazador
 import modo_escapa
-
-# -------------------------
-# Configuración / Constantes
-# -------------------------
+#---------------------------------------------------Inicialización y constantes--------------------------------------------------#
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# OJO: aquí ya NO hacemos pygame.init(), eso lo hace main.py
-# pygame.init()
-
-# Intentar reutilizar la ventana existente (creada en main.py)
 SCREEN = pygame.display.get_surface()
 if SCREEN is None:
-    # Si se ejecuta juego.py directamente (sin pasar por main),
-    # entonces sí creamos la ventana fullscreen aquí.
     pygame.init()
     SCREEN = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 
-SIZE = SCREEN.get_size()  # ahora SIZE tiene (ancho, alto) reales de la pantalla
+SIZE = SCREEN.get_size() 
 
 pygame.display.set_caption("Registro y Selección de Modo - Escapa / Cazador")
 
@@ -38,33 +31,32 @@ COL_PANEL = (28, 34, 40)
 COL_INPUT_BG = (245, 245, 245)
 COL_INPUT_TEXT = (20, 20, 20)
 
-# -------------------------
-# Música de fondo
-# -------------------------
+# ----------------------------------------------------- Música de fondo ------------------------------------------------------#
 try:
     music_path = os.path.join(BASE_DIR, "musica_menu.mp3")
-    # Opcional: solo cargar si no hay música sonando
     if not pygame.mixer.music.get_busy():
         pygame.mixer.music.load(music_path)
         pygame.mixer.music.set_volume(0.35)  # volumen entre 0.0 y 1.0
-        pygame.mixer.music.play(-1)  # -1 = loop infinito
+        pygame.mixer.music.play(-1)          # -1 para loop infinito
 except Exception as e:
     print("Error cargando música:", e)
 
-# -------------------------
-# Estado de registro / UI
-# -------------------------
-player_name = ""         # texto actual del input
-registered = False       # si ya completó el registro
-message = ""             # mensaje informativo en pantalla
+# ---------------------------------------------- Variables globales de estado -------------------------------------------------#
+player_name = ""        
+registered = False       
+message = ""            
 
-# Nuevos flags de submenús
 in_cazador_menu = False
 in_escapa_menu = False
 
 PLAYERS_FILE = os.path.join(BASE_DIR, "players.json")
 
-def load_players():
+volver_a_menu_principal = False
+
+################################################################################################################################
+############################################### Historial simple de jugadores ##################################################
+#---------------------------------------------------- Cargar jugadores -------------------------------------------------------#
+def cargar_jugadores():
     try:
         if os.path.exists(PLAYERS_FILE):
             with open(PLAYERS_FILE, "r", encoding="utf-8") as f:
@@ -73,11 +65,11 @@ def load_players():
         pass
     return []
 
-def save_player(name):
-    """Añade el nombre a players.json si no existe (historial simple)."""
+#---------------------------------------------------- Guardar jugadores -------------------------------------------------------#
+def guardar_jugadores(name):
     if not name:
         return
-    players = load_players()
+    players = cargar_jugadores()
     if name not in players:
         players.append(name)
         try:
@@ -86,9 +78,7 @@ def save_player(name):
         except Exception as e:
             print("Error guardando players.json:", e)
 
-# -------------------------
-# Clase Button (simple)
-# -------------------------
+#------------------------------------------------------- Clase Botón ---------------------------------------------------------#
 class Button:
     def __init__(self, rect, text, cb):
         self.rect = pygame.Rect(rect)
@@ -116,36 +106,47 @@ class Button:
             except Exception as ex:
                 print("Error en callback de botón:", ex)
 
-# -------------------------
-# UI: registro -> selección
-# -------------------------
-# Dimensiones botones selección
 btn_w, btn_h = 360, 56
 gap = 18
 start_y = SIZE[1]//2 - (btn_h*3 + gap*2)//2 + 40
 
-# --------- CALLBACKS PRINCIPALES ---------
-def on_cazador():
-    """En vez de ir directamente al juego, abre el submenú de dificultad."""
+################################################################################################################################
+##################################################### Lógica de la UI ##########################################################
+#--------------------------------------------------------- Callback cazador --------------------------------------------------#
+def en_cazador():
     global message, in_cazador_menu, in_escapa_menu
     message = ""
     in_escapa_menu = False
     in_cazador_menu = True
 
-def on_escapa():
-    """Abrir submenú de dificultad del modo Escapa (no iniciar todavía)."""
+#--------------------------------------------------------- Callback escapa ----------------------------------------------------#
+def en_escapa():
     global message, in_cazador_menu, in_escapa_menu
     message = ""
     in_cazador_menu = False
     in_escapa_menu = True
 
-def on_quit():
+#---------------------------------------------------------- Callback salir -----------------------------------------------------#
+def salir():
     pygame.quit()
     sys.exit(0)
 
-# --------- RESETEAR ESTADO DE MODO_CAZADOR ---------
-def reset_cazador_estado():
-    """Deja las variables globales de modo_cazador como si fuera una partida nueva."""
+#--------------------------------------------------------- Volver a registro --------------------------------------------------#
+def volver_a_registro():
+    global registered, in_cazador_menu, in_escapa_menu, message, player_name
+    player_name = ""
+    registered = False         
+    in_cazador_menu = False   
+    in_escapa_menu = False
+    message = ""
+
+#--------------------------------------------------------- Volver a menú principal -------------------------------------------#
+def marcar_volver_menu_principal():
+    global volver_a_menu_principal
+    volver_a_menu_principal = True
+
+#----------------------------------------------- Resetear estado de cazador --------------------------------------------------#
+def resetear_cazador_estado():
     try:
         modo_cazador.puntos = modo_cazador.PUNTOS_INICIALES
         modo_cazador.tiempo_restante = modo_cazador.TIEMPO_INICIAL
@@ -155,12 +156,10 @@ def reset_cazador_estado():
         modo_cazador.jugador_dir_dx = 0
         modo_cazador.jugador_dir_dy = 0
     except AttributeError:
-        # Por si en el futuro cambias algo en modo_cazador y falta alguna variable
         pass
 
-# --------- RESETEAR ESTADO DE MODO_ESCAPA ---------
-def reset_escapa_estado():
-    """Reinicia las variables globales de modo_escapa para una nueva partida."""
+#----------------------------------------------- Resetear estado de escapa ---------------------------------------------------#
+def resetear_escapa_estado():
     try:
         modo_escapa.juego_terminado = False
         modo_escapa.tiempo_restante = modo_escapa.TIEMPO_INICIAL
@@ -172,121 +171,125 @@ def reset_escapa_estado():
     except AttributeError:
         pass
 
-# --------- CALLBACKS DE DIFICULTAD CAZADOR ---------
-def start_cazador_facil():
+################################################################################################################################
+################################################### Callbacks de selección de modo #############################################
+#----------------------------------------------- iniciar modo cazador fácil ------------------------------------------------#
+def iniciar_cazador_facil():
     global message
     message = ""
-    # Ajustar parámetros del modo cazador para fácil:
     modo_cazador.COLUMNAS = 15
     modo_cazador.FILAS = 11
-    modo_cazador.ENEMY_TICK_MS = 500  # más lento
-    reset_cazador_estado()
+    modo_cazador.VEL_ENEMIGOS = 500 
+    resetear_cazador_estado()
     modo_cazador.run()
 
-def start_cazador_medio():
+#---------------------------------------------- iniciar modo cazador medio ------------------------------------------------#
+def iniciar_cazador_medio():
     global message
     message = ""
-    # Valores originales (modo "normal")
     modo_cazador.COLUMNAS = 19
     modo_cazador.FILAS = 13
-    modo_cazador.ENEMY_TICK_MS = 400
-    reset_cazador_estado()
+    modo_cazador.VEL_ENEMIGOS = 400
+    resetear_cazador_estado()
     modo_cazador.run()
 
-def start_cazador_dificil():
+#--------------------------------------------- iniciar modo cazador difícil ------------------------------------------------#
+def iniciar_cazador_dificil():
     global message
     message = ""
-    # Más grande y más rápido
     modo_cazador.COLUMNAS = 23
     modo_cazador.FILAS = 15
-    modo_cazador.ENEMY_TICK_MS = 300  # más rápido
-    reset_cazador_estado()
+    modo_cazador.VEL_ENEMIGOS = 300 
+    resetear_cazador_estado()
     modo_cazador.run()
 
-def on_cazador_back():
-    """Volver del submenú de dificultad al menú principal de modos."""
+#-------------------------------------- Callback volver del submenú cazador ------------------------------------------------#
+def en_cazador_volver():
     global in_cazador_menu, message
     in_cazador_menu = False
     message = ""
 
-# --------- CALLBACKS DE DIFICULTAD PARA MODO ESCAPA ---------
-def start_escapa_facil():
+#----------------------------------------------- iniciar modo escapa fácil -------------------------------------------------#
+def iniciar_escapa_facil():
     global message
     message = ""
-    modo_escapa.VEL_BASE = 2     # más lento
+    modo_escapa.VEL_BASE = 2   
     modo_escapa.TIEMPO_INICIAL = 30
-    reset_escapa_estado()
+    resetear_escapa_estado()
     modo_escapa.run()
 
-def start_escapa_medio():
+#---------------------------------------------- iniciar modo escapa medio -------------------------------------------------#
+def iniciar_escapa_medio():
     global message
     message = ""
     modo_escapa.VEL_BASE = 3
     modo_escapa.TIEMPO_INICIAL = 25
-    reset_escapa_estado()
+    resetear_escapa_estado()
     modo_escapa.run()
 
-def start_escapa_dificil():
+#--------------------------------------------- iniciar modo escapa difícil -------------------------------------------------#
+def iniciar_escapa_dificil():
     global message
     message = ""
-    modo_escapa.VEL_BASE = 4     # enemigos muy rápidos
+    modo_escapa.VEL_BASE = 4    
     modo_escapa.TIEMPO_INICIAL = 20
-    reset_escapa_estado()
+    resetear_escapa_estado()
     modo_escapa.run()
 
-def on_escapa_back():
-    """Volver del submenú de Escapa al menú principal de modos."""
+#-------------------------------------- Callback volver del submenú escapa -------------------------------------------------#
+def en_escapa_volver():
     global in_escapa_menu, message
     in_escapa_menu = False
     message = ""
 
-# Botones de selección PRINCIPAL (se dibujan tras el registro)
+################################################################################################################################
+############################################### Construcción de botones ########################################################
+#---------------------------------------------------- Botones menú principal --------------------------------------------------#
 buttons = [
     Button((SIZE[0]//2 - btn_w//2, start_y + i*(btn_h + gap), btn_w, btn_h), text, cb)
     for i, (text, cb) in enumerate([
-        ("Modo Cazador (1)", lambda: on_cazador()),
-        ("Modo Escapa (2)",  lambda: on_escapa()),
-        ("Salir (ESC)",      lambda: on_quit())
+        ("Modo Cazador (1)", lambda: en_cazador()),
+        ("Modo Escapa (2)",  lambda: en_escapa()),
+        ("Volver",      lambda: volver_a_registro())
     ])
 ]
 
-# Botones del SUBMENÚ de dificultad del cazador
+#--------------------------------------------- Botones del SUBMENÚ de dificultad del cazador ----------------------------------#
 cazador_buttons = [
     Button((SIZE[0]//2 - btn_w//2, start_y + i*(btn_h + gap), btn_w, btn_h), text, cb)
     for i, (text, cb) in enumerate([
-        ("Fácil",   start_cazador_facil),
-        ("Medio",   start_cazador_medio),
-        ("Difícil", start_cazador_dificil),
-        ("Volver",  on_cazador_back),
+        ("Fácil",   iniciar_cazador_facil),
+        ("Medio",   iniciar_cazador_medio),
+        ("Difícil", iniciar_cazador_dificil),
+        ("Volver",  en_cazador_volver),
     ])
 ]
 
-# Botones del SUBMENÚ de dificultad del escapa
+#---------------------------------------------- Botones del SUBMENÚ de dificultad del escapa -----------------------------------#
 escapa_buttons = [
     Button((SIZE[0]//2 - btn_w//2, start_y + i*(btn_h + gap), btn_w, btn_h), text, cb)
     for i, (text, cb) in enumerate([
-        ("Fácil",   start_escapa_facil),
-        ("Medio",   start_escapa_medio),
-        ("Difícil", start_escapa_dificil),
-        ("Volver",  on_escapa_back),
+        ("Fácil",   iniciar_escapa_facil),
+        ("Medio",   iniciar_escapa_medio),
+        ("Difícil", iniciar_escapa_dificil),
+        ("Volver",  en_escapa_volver),
     ])
 ]
-
-# -------------------------
-# Dibujo UI
-# -------------------------
+#------------------------------------------------------ Área de input --------------------------------------------------------#
 input_rect = pygame.Rect(120, 160, SIZE[0]-240, 44)
 input_active = True
 max_name_len = 20
 
-def draw_registration():
+################################################################################################################################
+################################################ Dibujo de pantallas ###########################################################
+#----------------------------------------------------- Dibujo de registro -----------------------------------------------------#
+def dibujar_registro():
     SCREEN.fill(COL_BG)
     title = FONT.render("Registro obligatorio", True, COL_TEXT)
     SCREEN.blit(title, title.get_rect(center=(SIZE[0]//2, 80)))
     subtitle = SMALL.render("Introduce tu nombre de jugador (obligatorio) y pulsa Enter o Continuar", True, COL_TEXT)
     SCREEN.blit(subtitle, (SIZE[0]//2 - subtitle.get_width()//2, 110))
 
-    # input box
     pygame.draw.rect(SCREEN, COL_INPUT_BG, input_rect, border_radius=6)
     pygame.draw.rect(SCREEN, (100,100,100), input_rect, 2, border_radius=6)
     name_surf = FONT.render(
@@ -296,12 +299,14 @@ def draw_registration():
     )
     SCREEN.blit(name_surf, (input_rect.x + 8, input_rect.y + (input_rect.height - name_surf.get_height())//2))
 
-    # continuar button
-    cont_btn = Button((SIZE[0]//2 - 140, input_rect.bottom + 20, 280, 48), "Continuar", lambda: submit_registration())
+    cont_btn = Button((SIZE[0]//2 - 140, input_rect.bottom + 20, 280, 48), "Continuar", lambda: enviar_registro())
     cont_btn.draw(SCREEN, enabled=(len(player_name.strip()) > 0))
 
-    # historial rápido (últimos jugadores)
-    players = load_players()
+    volver_btn = Button((SIZE[0]//2 - 170, input_rect.bottom + 80, 340, 48),"Volver al menú principal", marcar_volver_menu_principal)
+    volver_btn.draw(SCREEN, enabled=True)
+
+    # --------------------------------------- Historial de jugadores ----------------------------------------#
+    players = cargar_jugadores()
     if players:
         hs = SMALL.render("Historial: " + ", ".join(players[-6:]), True, (200,200,200))
         SCREEN.blit(hs, (input_rect.x, input_rect.bottom + 80))
@@ -310,7 +315,8 @@ def draw_registration():
         msg_s = SMALL.render(message, True, (220,220,220))
         SCREEN.blit(msg_s, (20, SIZE[1]-30))
 
-def draw_selection():
+#---------------------------------------------------- Dibujo de selección -----------------------------------------------------#
+def dibujar_seleccion():
     SCREEN.fill(COL_BG)
     header = FONT.render(f"Jugador: {player_name}", True, COL_TEXT)
     SCREEN.blit(header, header.get_rect(center=(SIZE[0]//2, 48)))
@@ -318,7 +324,6 @@ def draw_selection():
     pygame.draw.rect(SCREEN, COL_PANEL, (40, 120, SIZE[0]-80, SIZE[1]-200), border_radius=10)
 
     if not in_cazador_menu and not in_escapa_menu:
-        # Menú principal de modos
         subtitle = SMALL.render("Elige el modo de juego", True, COL_TEXT)
         SCREEN.blit(subtitle, (SIZE[0]//2 - subtitle.get_width()//2, 84))
         for b in buttons:
@@ -335,27 +340,22 @@ def draw_selection():
         SCREEN.blit(subtitle, (SIZE[0]//2 - subtitle.get_width()//2, 84))
         for b in escapa_buttons:
             b.draw(SCREEN)
-
     if message:
         txt = SMALL.render(message, True, (220,220,220))
         SCREEN.blit(txt, (20, SIZE[1]-30))
 
-# -------------------------
-# Registro: manejar submit
-# -------------------------
-def submit_registration():
+#-------------------------------------------------- Enviar registro --------------------------------------------------------#
+def enviar_registro():
     global registered, message
     name = player_name.strip()
     if not name:
         message = "El nombre es obligatorio."
         return
-    save_player(name)
+    guardar_jugadores(name)
     registered = True
     message = f"Registro completado: {name}"
 
-# -------------------------
-# Manejo de eventos
-# -------------------------
+#-------------------------------------------------- Manejo de eventos -------------------------------------------------------#
 def handle_event(e):
     global player_name, input_active, message, registered, in_cazador_menu, in_escapa_menu
     if e.type == pygame.QUIT:
@@ -363,31 +363,28 @@ def handle_event(e):
         sys.exit(0)
 
     if not registered:
-        # entrada de texto para nombre
         if e.type == pygame.KEYDOWN:
             if e.key == pygame.K_ESCAPE:
                 pygame.quit()
                 sys.exit(0)
             elif e.key == pygame.K_RETURN:
-                submit_registration()
+                enviar_registro()
             elif e.key == pygame.K_BACKSPACE:
                 player_name = player_name[:-1]
             else:
-                # añadir caracteres imprimibles
                 ch = e.unicode
                 if ch and len(player_name) < max_name_len and ch.isprintable():
                     player_name += ch
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1:
-            # clic sobre "Continuar" (dibujado en draw_registration)
             cont_btn_rect = pygame.Rect(SIZE[0]//2 - 140, input_rect.bottom + 20, 280, 48)
             if cont_btn_rect.collidepoint(e.pos) and len(player_name.strip()) > 0:
-                submit_registration()
+                enviar_registro()
+            volver_btn_rect = pygame.Rect(SIZE[0]//2 - 140, input_rect.bottom + 80, 280, 48)
+            if volver_btn_rect.collidepoint(e.pos):
+                marcar_volver_menu_principal()
     else:
-        # después del registro: selección de modo y atajos
         if e.type == pygame.KEYDOWN:
             if e.key == pygame.K_ESCAPE:
-                # ESC solo sale del juego si estamos en el menú principal.
-                # Si estamos en un submenú de dificultad, vuelve al menú de modos.
                 if in_cazador_menu or in_escapa_menu:
                     in_cazador_menu = False
                     in_escapa_menu = False
@@ -396,13 +393,10 @@ def handle_event(e):
                     pygame.quit()
                     sys.exit(0)
             if e.key == pygame.K_1 and not in_escapa_menu:
-                # Atajo: abrir menú de cazador (no lanza directamente el juego)
-                on_cazador()
+                en_cazador()
             if e.key == pygame.K_2 and not in_cazador_menu:
-                # Atajo: abrir menú de escapa (no lanza directamente el juego)
-                on_escapa()
+                en_escapa()
 
-        # Manejo de botones según la pantalla actual
         if in_cazador_menu:
             for b in cazador_buttons:
                 b.handle(e, enabled=True)
@@ -413,12 +407,10 @@ def handle_event(e):
             for b in buttons:
                 b.handle(e, enabled=True)
 
-# -------------------------
-# Bucle principal
-# -------------------------
+################################################################################################################################
+################################################ Bucle principal ##############################################################
 def main():
     global SCREEN, SIZE
-    # Reasegurar que usamos la ventana actual (por si main cambió algo)
     surf = pygame.display.get_surface()
     if surf is not None:
         SCREEN = surf
@@ -427,10 +419,12 @@ def main():
     while True:
         for e in pygame.event.get():
             handle_event(e)
+        if volver_a_menu_principal:
+            return "menu_principal"
         if not registered:
-            draw_registration()
+            dibujar_registro()
         else:
-            draw_selection()
+            dibujar_seleccion()
         pygame.display.flip()
         CLOCK.tick(60)
 
