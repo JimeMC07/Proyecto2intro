@@ -181,7 +181,7 @@ def iniciar_cazador_facil():
     modo_cazador.FILAS = 11
     modo_cazador.VEL_ENEMIGOS = 500 
     resetear_cazador_estado()
-    modo_cazador.run()
+    modo_cazador.run(player_name)
 
 #---------------------------------------------- iniciar modo cazador medio ------------------------------------------------#
 def iniciar_cazador_medio():
@@ -191,7 +191,7 @@ def iniciar_cazador_medio():
     modo_cazador.FILAS = 13
     modo_cazador.VEL_ENEMIGOS = 400
     resetear_cazador_estado()
-    modo_cazador.run()
+    modo_cazador.run(player_name)
 
 #--------------------------------------------- iniciar modo cazador difícil ------------------------------------------------#
 def iniciar_cazador_dificil():
@@ -201,7 +201,7 @@ def iniciar_cazador_dificil():
     modo_cazador.FILAS = 15
     modo_cazador.VEL_ENEMIGOS = 300 
     resetear_cazador_estado()
-    modo_cazador.run()
+    modo_cazador.run(player_name)
 
 #-------------------------------------- Callback volver del submenú cazador ------------------------------------------------#
 def en_cazador_volver():
@@ -216,7 +216,7 @@ def iniciar_escapa_facil():
     modo_escapa.VEL_BASE = 2   
     modo_escapa.TIEMPO_INICIAL = 30
     resetear_escapa_estado()
-    modo_escapa.run()
+    modo_escapa.run(player_name)
 
 #---------------------------------------------- iniciar modo escapa medio -------------------------------------------------#
 def iniciar_escapa_medio():
@@ -225,7 +225,7 @@ def iniciar_escapa_medio():
     modo_escapa.VEL_BASE = 3
     modo_escapa.TIEMPO_INICIAL = 25
     resetear_escapa_estado()
-    modo_escapa.run()
+    modo_escapa.run(player_name)
 
 #--------------------------------------------- iniciar modo escapa difícil -------------------------------------------------#
 def iniciar_escapa_dificil():
@@ -234,7 +234,7 @@ def iniciar_escapa_dificil():
     modo_escapa.VEL_BASE = 4    
     modo_escapa.TIEMPO_INICIAL = 20
     resetear_escapa_estado()
-    modo_escapa.run()
+    modo_escapa.run(player_name)
 
 #-------------------------------------- Callback volver del submenú escapa -------------------------------------------------#
 def en_escapa_volver():

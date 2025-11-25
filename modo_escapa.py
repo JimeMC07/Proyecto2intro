@@ -4,9 +4,14 @@ import pygame
 import random
 import sys
 import os
+import json
 import mapa
 # ------------------------------------------------------ RUTAS Y DIRECTORIOS ---------------------------------------------------#
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SCORES_FILE = os.path.join(BASE_DIR, "scores.json")
+nombre_jugador_escapa = ""
+nivel_actual_escapa = 1  
 
 ################################################################################################################################
 ############################################ PARÁMETROS GENERALES DEL LABERINTO Y JUEGO ########################################
@@ -239,6 +244,56 @@ def enemigo_en_trampa(enemigo, now):
     return False
 
 ###############################################################################################################################
+########################################### PUNTAJES MODO ESCAPA (scores.json) ################################################
+def cargar_puntajes():
+    if not os.path.exists(SCORES_FILE):
+        return {"escapa": [], "cazador": []}
+    try:
+        with open(SCORES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if "escapa" not in data:
+            data["escapa"] = []
+        if "cazador" not in data:
+            data["cazador"] = []
+        return data
+    except Exception as e:
+        print("Error cargando scores.json en modo_escapa:", e)
+        return {"escapa": [], "cazador": []}
+
+#------------------------------------------------- Registrar puntaje escapa --------------------------------------------------#
+def registrar_puntaje_escapa(nombre, puntaje):
+    data = cargar_puntajes()
+    if "escapa" not in data:
+        data["escapa"] = []
+
+    data["escapa"].append({"name": nombre, "score": puntaje})
+    data["escapa"] = sorted(
+        data["escapa"],
+        key=lambda e: e.get("score", 0),
+        reverse=True
+    )[:5]
+
+    try:
+        with open(SCORES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print("Error guardando scores.json en modo_escapa:", e)
+
+#-------------------------------------------------- Registrar puntaje final --------------------------------------------------#
+def registrar_puntaje_final():
+    if nombre_jugador_escapa:
+        registrar_puntaje_escapa(nombre_jugador_escapa, puntos)
+
+#--------------------------------------------------- Calcular bonus por tiempo --------------------------------------------------#
+def calcular_bonus_tiempo():
+    base_mult = 10  
+    nivel_mult = 1.0 + 0.5 * (nivel_actual_escapa - 1)  
+    if nivel_mult < 1.0:
+        nivel_mult = 1.0
+    segundos = max(tiempo_restante, 0)
+    return int(segundos * base_mult * nivel_mult)
+
+###############################################################################################################################
 ######################################################### IA DE LOS ENEMIGOS ##################################################
 #----------------------------------------------------- Mover un enemigo ------------------------------------------------------#
 def mover_un_enemigo(enemigo):
@@ -320,12 +375,18 @@ def comprobar_captura():
 
 #-------------------------------------------------- Comprobar llegada a salida ------------------------------------------------#
 def comprobar_llegada_salida():
-    global juego_terminado, victoria
+    global juego_terminado, victoria, puntos
     if juego_terminado:
         return
     if (jugador_x, jugador_y) == (salida_x, salida_y):
         juego_terminado = True
         victoria = True
+
+        # Bonus por tiempo restante, escalado por nivel
+        bonus_tiempo = calcular_bonus_tiempo()
+        puntos += bonus_tiempo
+
+        registrar_puntaje_final()
         return
 
 ###############################################################################################################################
@@ -705,7 +766,7 @@ def actualizar_animacion_jugador(now):
 ###############################################################################################################################
 ################################################ BUCLE PRINCIPAL: run() #######################################################
 #----------------------------------------------------- Bucle principal -------------------------------------------------------#
-def run():
+def run(nombre_jugador="", nivel=1):
     global screen, screen_width, screen_height
     global ancho, alto, offset_x, offset_y, tamaño_celda
     global laberinto, salida_x, salida_y
@@ -717,6 +778,10 @@ def run():
     global corriendo, jugador_dir_dx, jugador_dir_dy
     global mensaje, ultima_trampa
     global running
+    global nombre_jugador_escapa, nivel_actual_escapa
+
+    nombre_jugador_escapa = nombre_jugador
+    nivel_actual_escapa = nivel
 
     #--------------------------------Inicialización de Pygame y pantalla completa--------------------------------------------#
     screen = pygame.display.get_surface()
@@ -871,6 +936,7 @@ def run():
                 tiempo_restante = 0
                 juego_terminado = True
                 victoria = False
+                # IMPORTANTE: no registrar puntaje al perder por tiempo
 
         # ------------------------------------------------ DIBUJADO EN PANTALLA ----------------------------------------------#
         screen.fill(COLOR_FONDO)

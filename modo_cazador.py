@@ -4,6 +4,7 @@ import pygame
 import random
 import sys
 import os
+import json
 import mapa
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +75,10 @@ ancho = 0
 alto = 0
 offset_x = 0
 offset_y = 0
+
+# --- Puntajes (archivo compartido con el menú) ---
+SCORES_FILE = os.path.join(BASE_DIR, "scores.json")
+nombre_jugador_cazador = ""
 
 ################################################################################################################################
 ################################################## Helpers y funciones #########################################################
@@ -228,6 +233,45 @@ def mover_enemigos_tick(jugador_x_local, jugador_y_local):
 
 ################################################################################################################################
 ############################################## Animaciones fin de juego ########################################################
+# ======================================================================
+# Puntajes: Top 5 modo Cazador
+# ======================================================================
+
+def cargar_puntajes():
+    if not os.path.exists(SCORES_FILE):
+        return {"escapa": [], "cazador": []}
+    try:
+        with open(SCORES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if "escapa" not in data:
+            data["escapa"] = []
+        if "cazador" not in data:
+            data["cazador"] = []
+        return data
+    except Exception as e:
+        print("Error cargando scores.json en modo_cazador:", e)
+        return {"escapa": [], "cazador": []}
+
+
+def registrar_puntaje_cazador(nombre, puntaje):
+    """Registra el puntaje en el Top 5 del modo Cazador."""
+    data = cargar_puntajes()
+    if "cazador" not in data:
+        data["cazador"] = []
+
+    data["cazador"].append({"name": nombre, "score": puntaje})
+    data["cazador"] = sorted(
+        data["cazador"],
+        key=lambda e: e.get("score", 0),
+        reverse=True
+    )[:5]
+
+    try:
+        with open(SCORES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print("Error guardando scores.json en modo_cazador:", e)
+
 # ----------------------------------------------------- Game Over -------------------------------------------------------------#
 def game_over(motivo="puntos"):
     global juego_terminado
@@ -235,12 +279,20 @@ def game_over(motivo="puntos"):
         return
     juego_terminado = True
 
+    # Registrar puntaje al terminar por puntos
+    if nombre_jugador_cazador:
+        registrar_puntaje_cazador(nombre_jugador_cazador, puntos)
+
 # --------------------------------------------------- Fin partida por tiempo --------------------------------------------------#
 def fin_partida_por_tiempo():
     global juego_terminado
     if juego_terminado:
         return
     juego_terminado = True
+
+    # Registrar puntaje al terminar por tiempo
+    if nombre_jugador_cazador:
+        registrar_puntaje_cazador(nombre_jugador_cazador, puntos)
 
 # -------------------------------------------------------- Mover jugador ------------------------------------------------------#
 def mover_jugador(dx, dy):
@@ -568,7 +620,7 @@ def actualizar_animacion_jugador(now):
 ##################################################################################################################################
 ######################################################### Main loop ##############################################################
 #--------------------------------------------------------- Run --------------------------------------------------------------#
-def run():
+def run(nombre_jugador=""):
     global screen, screen_width, screen_height
     global ancho, alto, offset_x, offset_y, tamaño_celda
     global laberinto, salida_x, salida_y
@@ -578,6 +630,9 @@ def run():
     global puntos, tiempo_restante, juego_terminado, energia_segmentos
     global corriendo, jugador_dir_dx, jugador_dir_dy
     global cuenta_regresiva, cuenta_regresiva_activa, tick_previo_preconteo
+    global nombre_jugador_cazador
+
+    nombre_jugador_cazador = nombre_jugador
 
     screen = pygame.display.get_surface()
     if screen is None:

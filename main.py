@@ -40,16 +40,40 @@ COLOR_PANEL = (30, 40, 50)
 ################################################################################################################################
 ################################################ Funciones de carga de puntajes ################################################
 #-------------------------------------------------- cargar puntajes -------------------------------------------------------#
+# -------------------- Puntajes (archivo scores.json) -------------------- #
+SCORES_FILE = os.path.join(BASE_DIR, "scores.json")
+
 def cargar_puntajes():
-    path = os.path.join(BASE_DIR, "scores.json")
-    if not os.path.exists(path):
-        return []
+    if not os.path.exists(SCORES_FILE):
+        return {"escapa": [], "cazador": []}
+
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(SCORES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if "escapa" not in data:
+            data["escapa"] = []
+        if "cazador" not in data:
+            data["cazador"] = []
+        return data
     except Exception as e:
         print("Error cargando scores.json:", e)
-        return []
+        return {"escapa": [], "cazador": []}
+    
+#------------------------------------------------ registrar puntaje -----------------------------------------------------#
+def registrar_puntaje(modo, nombre, puntaje):
+    data = cargar_puntajes()
+    if modo not in data:
+        data[modo] = []
+
+    data[modo].append({"name": nombre, "score": puntaje})
+    data[modo] = sorted(data[modo], key=lambda e: e["score"], reverse=True)[:5]
+
+    try:
+        with open(SCORES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print("Error guardando scores.json:", e)
 
 #----------------------------------------------------- Lanzar juego ---------------------------------------------------------#
 def abrir_juego():
@@ -133,21 +157,73 @@ def dibujar_menu():
 #---------------------------------------------------- Dibujar puntajes -------------------------------------------------------#
 def dibujar_puntajes():
     SCREEN.fill(COLOR_BG)
-    panel = pygame.Rect(60, 60, WIDTH-120, HEIGHT-120)
+
+    panel = pygame.Rect(60, 60, WIDTH - 120, HEIGHT - 120)
     pygame.draw.rect(SCREEN, COLOR_PANEL, panel, border_radius=8)
-    title = FONT.render("Top Puntajes (Modo Cazador - ejemplo)", True, COLOR_TEXT)
-    SCREEN.blit(title, (panel.x + 16, panel.y + 12))
-    y = panel.y + 56
-    if not scores_cache:
-        nof = SMALL.render("No hay puntajes guardados. Juega para generar uno.", True, COLOR_TEXT)
-        SCREEN.blit(nof, (panel.x + 16, y))
+
+    titulo = FONT.render("Puntajes", True, COLOR_TEXT)
+    SCREEN.blit(titulo, (panel.x + (panel.width - titulo.get_width()) // 2, panel.y + 10))
+
+    col_width = (panel.width - 40) // 2
+    left_x  = panel.x + 20
+    right_x = left_x + col_width + 20
+    top_y   = panel.y + 50
+
+    pygame.draw.line(
+        SCREEN,
+        (200, 200, 200),
+        (panel.centerx, panel.y + 40),
+        (panel.centerx, panel.bottom - 50),
+        1,
+    )
+
+    # ---------- Columna izquierda: Modo Escapa ---------- #
+    titulo_esc = FONT.render("Top 5 – Modo Escapa", True, COLOR_TEXT)
+    SCREEN.blit(titulo_esc, (left_x, top_y))
+
+    lista_escapa = sorted(
+        scores_cache.get("escapa", []),
+        key=lambda e: e.get("score", 0),
+        reverse=True
+    )[:5]
+
+    y_esc = top_y + 40
+    if not lista_escapa:
+        sin_datos = SMALL.render("Sin puntajes aún.", True, COLOR_TEXT)
+        SCREEN.blit(sin_datos, (left_x, y_esc))
     else:
-        for i, entry in enumerate(scores_cache[:10], start=1):
-            txt = SMALL.render(f"{i}. {entry.get('name','---')}  -  {entry.get('score',0)}", True, COLOR_TEXT)
-            SCREEN.blit(txt, (panel.x + 16, y))
-            y += 28
+        for i, entry in enumerate(lista_escapa, start=1):
+            nombre = entry.get("name", "---")
+            puntaje = entry.get("score", 0)
+            linea = SMALL.render(f"{i}. {nombre}  -  {puntaje}", True, COLOR_TEXT)
+            SCREEN.blit(linea, (left_x, y_esc))
+            y_esc += 26
+
+    # ---------- Columna derecha: Modo Cazador ---------- #
+    titulo_caz = FONT.render("Top 5 – Modo Cazador", True, COLOR_TEXT)
+    SCREEN.blit(titulo_caz, (right_x, top_y))
+
+    lista_cazador = sorted(
+        scores_cache.get("cazador", []),
+        key=lambda e: e.get("score", 0),
+        reverse=True
+    )[:5]
+
+    y_caz = top_y + 40
+    if not lista_cazador:
+        sin_datos = SMALL.render("Sin puntajes aún.", True, COLOR_TEXT)
+        SCREEN.blit(sin_datos, (right_x, y_caz))
+    else:
+        for i, entry in enumerate(lista_cazador, start=1):
+            nombre = entry.get("name", "---")
+            puntaje = entry.get("score", 0)
+            linea = SMALL.render(f"{i}. {nombre}  -  {puntaje}", True, COLOR_TEXT)
+            SCREEN.blit(linea, (right_x, y_caz))
+            y_caz += 26
+
     back = SMALL.render("Presiona ESC o clic en pantalla para volver", True, COLOR_TEXT)
     SCREEN.blit(back, (panel.centerx - back.get_width()//2, panel.bottom - 34))
+
 
 #-------------------------------------------------- Dibujar configuración -----------------------------------------------------#
 def dibujar_config():
